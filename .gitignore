@@ -29,3 +29,6 @@ build/
 
 # Generated
 /tmp/
+
+# Icon downloads log
+*.svg.download.log
