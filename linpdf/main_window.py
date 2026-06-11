@@ -1,16 +1,16 @@
 import os
+import fitz
 
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QStatusBar, QLabel, QFileDialog, QMessageBox,
-    QApplication, QMenuBar, QMenu, QToolBar,
+    QInputDialog, QDialog, QColorDialog,
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap
+from PySide6.QtCore import Qt, QRectF
+from PySide6.QtGui import QAction, QKeySequence, QColor
 
 from linpdf.constants import (
-    APP_NAME, APP_VERSION, ToolMode, ViewMode,
-    DEFAULT_ZOOM, FILE_EXTENSIONS_PDF,
+    APP_NAME, APP_VERSION, ToolMode, AnnotationType,
 )
 from linpdf.config import Config
 from linpdf.core.document import Document
@@ -18,6 +18,18 @@ from linpdf.core.renderer import Renderer
 from linpdf.ui.ribbon.ribbon_bar import RibbonBar
 from linpdf.ui.viewer.pdf_viewer import PDFViewer
 from linpdf.ui.viewer.thumbnail_panel import ThumbnailWidget
+from linpdf.annotations.annotation_manager import AnnotationManager
+from linpdf.annotations.properties_dialog import PropertiesDialog
+from linpdf.page_management.page_manager import PageManager
+from linpdf.page_management.watermark import (
+    add_text_watermark, add_page_numbers,
+    add_header, add_footer,
+)
+from linpdf.conversion.exporter import Exporter
+from linpdf.conversion.importer import Importer
+from linpdf.conversion.ocr_processor import OCRProcessor
+from linpdf.security.pdf_security import PDFSecurity
+from linpdf.forms.form_manager import FormManager
 
 
 class MainWindow(QMainWindow):
@@ -31,6 +43,7 @@ class MainWindow(QMainWindow):
         self._current_tool = ToolMode.SELECT
 
         self._setup_window()
+        self._create_managers()
         self._create_ribbon()
         self._create_viewer()
         self._create_status_bar()
@@ -42,6 +55,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setMinimumSize(1024, 700)
         self.resize(1280, 800)
+
+    def _create_managers(self):
+        self._page_manager = PageManager(self._document)
+        self._exporter = Exporter(self._document)
+        self._importer = Importer()
+        self._ocr = OCRProcessor(self._document)
+        self._security = PDFSecurity()
+        self._forms = FormManager()
 
     def _create_ribbon(self):
         self._ribbon = RibbonBar(self)
@@ -126,60 +147,30 @@ class MainWindow(QMainWindow):
         self._btn_select.clicked.connect(lambda: self._set_tool(ToolMode.SELECT))
         self._btn_pan.clicked.connect(lambda: self._set_tool(ToolMode.PAN))
         self._btn_delete_page.clicked.connect(self._delete_current_page)
-        self._btn_encrypt.clicked.connect(self._show_coming_soon)
-        self._btn_sign.clicked.connect(self._show_coming_soon)
-        self._btn_redact.clicked.connect(self._show_coming_soon)
-        self._btn_to_word.clicked.connect(self._show_coming_soon)
-        self._btn_to_excel.clicked.connect(self._show_coming_soon)
-        self._btn_to_ppt.clicked.connect(self._show_coming_soon)
-        self._btn_to_image.clicked.connect(self._show_coming_soon)
-        self._btn_ocr.clicked.connect(self._show_coming_soon)
-        self._btn_blank_page.clicked.connect(self._show_coming_soon)
-        self._btn_from_file.clicked.connect(self._show_coming_soon)
-        self._btn_insert_image.clicked.connect(self._show_coming_soon)
+        self._btn_encrypt.clicked.connect(self._encrypt_document)
+        self._btn_sign.clicked.connect(self._sign_document)
+        self._btn_redact.clicked.connect(self._redact_document)
+        self._btn_to_word.clicked.connect(lambda: self._export_file("docx"))
+        self._btn_to_excel.clicked.connect(lambda: self._export_file("xlsx"))
+        self._btn_to_ppt.clicked.connect(lambda: self._export_file("pptx"))
+        self._btn_to_image.clicked.connect(self._export_images)
+        self._btn_ocr.clicked.connect(self._run_ocr)
+        self._btn_blank_page.clicked.connect(self._insert_blank_page)
+        self._btn_from_file.clicked.connect(self._insert_from_file)
+        self._btn_insert_image.clicked.connect(self._insert_image)
         self._btn_link.clicked.connect(self._show_coming_soon)
-        self._btn_stamp.clicked.connect(self._show_coming_soon)
-        self._btn_rotate_cw.clicked.connect(self._show_coming_soon)
-        self._btn_rotate_ccw.clicked.connect(self._show_coming_soon)
-        self._btn_extract.clicked.connect(self._show_coming_soon)
-        self._btn_highlight.clicked.connect(self._show_coming_soon)
-        self._btn_underline.clicked.connect(self._show_coming_soon)
-        self._btn_strikeout.clicked.connect(self._show_coming_soon)
-        self._btn_note.clicked.connect(self._show_coming_soon)
-        self._btn_fill_form.clicked.connect(self._show_coming_soon)
-        self._btn_create_form.clicked.connect(self._show_coming_soon)
-        self._btn_undo.clicked.connect(self._show_coming_soon)
-        self._btn_redo.clicked.connect(self._show_coming_soon)
-
-    def _set_tool(self, mode):
-        self._current_tool = mode
-        if mode == ToolMode.SELECT:
-            self._viewer.setDragMode(self._viewer.RubberBandDrag)
-            self._btn_select.setChecked(True)
-            self._btn_pan.setChecked(False)
-        elif mode == ToolMode.PAN:
-            self._viewer.setDragMode(self._viewer.ScrollHandDrag)
-            self._btn_select.setChecked(False)
-            self._btn_pan.setChecked(True)
-
-    def _create_viewer(self):
-        self._viewer = PDFViewer()
-        self._thumbnail_panel = ThumbnailWidget()
-
-        self._splitter = QSplitter(Qt.Horizontal)
-        self._splitter.addWidget(self._thumbnail_panel)
-        self._splitter.addWidget(self._viewer)
-        self._splitter.setStretchFactor(0, 0)
-        self._splitter.setStretchFactor(1, 1)
-        self._splitter.setSizes([200, 800])
-
-        central = QWidget()
-        layout = QVBoxLayout(central)
-        layout.setSpacing(0)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._ribbon)
-        layout.addWidget(self._splitter)
-        self.setCentralWidget(central)
+        self._btn_stamp.clicked.connect(self._add_stamp)
+        self._btn_rotate_cw.clicked.connect(lambda: self._rotate_page(90))
+        self._btn_rotate_ccw.clicked.connect(lambda: self._rotate_page(270))
+        self._btn_extract.clicked.connect(self._extract_page)
+        self._btn_highlight.clicked.connect(lambda: self._set_tool(ToolMode.HIGHLIGHT))
+        self._btn_underline.clicked.connect(lambda: self._set_tool(ToolMode.UNDERLINE))
+        self._btn_strikeout.clicked.connect(lambda: self._set_tool(ToolMode.STRIKEOUT))
+        self._btn_note.clicked.connect(lambda: self._set_tool(ToolMode.NOTE))
+        self._btn_fill_form.clicked.connect(self._fill_form)
+        self._btn_create_form.clicked.connect(self._create_form)
+        self._btn_undo.clicked.connect(self._undo)
+        self._btn_redo.clicked.connect(self._redo)
 
     def _create_status_bar(self):
         self._status_bar = QStatusBar()
@@ -207,8 +198,11 @@ class MainWindow(QMainWindow):
         file_menu.addAction("E&xit", self.close, QKeySequence.Quit)
 
         edit_menu = menubar.addMenu("&Edit")
-        edit_menu.addAction("&Undo", self._show_coming_soon, QKeySequence.Undo)
-        edit_menu.addAction("&Redo", self._show_coming_soon, QKeySequence("Ctrl+Y"))
+        edit_menu.addAction("&Undo", self._undo, QKeySequence.Undo)
+        edit_menu.addAction("&Redo", self._redo, QKeySequence("Ctrl+Y"))
+        edit_menu.addSeparator()
+        edit_menu.addAction("&Delete Page", self._delete_current_page)
+        edit_menu.addAction("&Extract Page", self._extract_page)
 
         view_menu = menubar.addMenu("&View")
         view_menu.addAction("Zoom &In", lambda: self._viewer.zoom_in(), QKeySequence.ZoomIn)
@@ -235,6 +229,12 @@ class MainWindow(QMainWindow):
         self._viewer.document_dropped.connect(self.open_path)
         self._thumbnail_panel.page_selected.connect(self._viewer.go_to_page)
 
+    def _ensure_document(self):
+        if not self._document.is_loaded:
+            QMessageBox.information(self, "No Document", "Please open a PDF first.")
+            return False
+        return True
+
     def open_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -249,17 +249,23 @@ class MainWindow(QMainWindow):
         if not os.path.exists(path):
             QMessageBox.warning(self, "File Not Found", f"Cannot find:\n{path}")
             return
-
         try:
             self._document.open(path)
             self._current_file = path
             self._config.last_directory = os.path.dirname(path)
             self._config.add_recent_file(path)
+
+            if self._document.is_loaded:
+                self._annot_mgr = AnnotationManager(
+                    self._document,
+                    self._viewer._scene,
+                )
+                self._annot_mgr.load_all_annotations(self._viewer.zoom)
         except Exception as e:
             QMessageBox.critical(self, "Open Failed", f"Failed to open PDF:\n{e}")
 
     def save_file(self):
-        if self._current_file and self._document.is_modified:
+        if self._current_file and (self._document.is_modified or (self._annot_mgr and self._annot_mgr.has_undo())):
             self._document.save(self._current_file)
         elif not self._current_file:
             self.save_file_as()
@@ -293,8 +299,309 @@ class MainWindow(QMainWindow):
     def print_file(self):
         self._show_coming_soon()
 
+    def _undo(self):
+        if self._annot_mgr:
+            self._annot_mgr.undo()
+
+    def _redo(self):
+        if self._annot_mgr:
+            self._annot_mgr.redo()
+
     def _delete_current_page(self):
+        if not self._ensure_document():
+            return
+        index = self._viewer.get_current_page()
+        if self._document.page_count <= 1:
+            QMessageBox.warning(self, "Cannot Delete", "Cannot delete the last page.")
+            return
+        ret = QMessageBox.question(
+            self, "Delete Page",
+            f"Delete page {index + 1}?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if ret == QMessageBox.Yes:
+            self._page_manager.delete_page(index)
+            self._rebuild_viewer()
+
+    def _extract_page(self):
+        if not self._ensure_document():
+            return
+        index = self._viewer.get_current_page()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Extract Page As",
+            self._config.last_directory,
+            "PDF Files (*.pdf)",
+        )
+        if path:
+            if not path.lower().endswith(".pdf"):
+                path += ".pdf"
+            success = self._page_manager.extract_page(index, path)
+            if success:
+                QMessageBox.information(self, "Extracted", f"Page {index + 1} saved.")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to extract page.")
+
+    def _rotate_page(self, degrees):
+        if not self._ensure_document():
+            return
+        index = self._viewer.get_current_page()
+        self._page_manager.rotate_page(index, degrees)
+        self._rebuild_viewer()
+
+    def _insert_blank_page(self):
+        if not self._ensure_document():
+            return
+        index = self._viewer.get_current_page() + 1
+        self._page_manager.insert_blank_page(index)
+        self._rebuild_viewer()
+        self._viewer.go_to_page(index)
+
+    def _insert_from_file(self):
+        if not self._ensure_document():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Insert PDF", self._config.last_directory, "PDF Files (*.pdf)",
+        )
+        if path:
+            index = self._viewer.get_current_page() + 1
+            self._page_manager.insert_from_file(index, path)
+            self._rebuild_viewer()
+
+    def _insert_image(self):
         self._show_coming_soon()
+
+    def _add_stamp(self):
+        if not self._ensure_document():
+            return
+        stamps = ["DRAFT", "CONFIDENTIAL", "APPROVED", "REVIEWED", "RECEIVED",
+                  "VOID", "SIGNED", "INITIALED", "COMPLETED", "REJECTED"]
+        stamp, ok = QInputDialog.getItem(self, "Select Stamp", "Stamp:", stamps, 0, False)
+        if ok and stamp:
+            index = self._viewer.get_current_page()
+            page = self._document.get_page(index)
+            if page:
+                w, h = page.width, page.height
+                rect = QRectF(w * 0.3, h * 0.3, w * 0.4, h * 0.15)
+                if self._annot_mgr:
+                    data = {
+                        'page_index': index,
+                        'type': AnnotationType.STAMP,
+                        'rect': rect,
+                        'icon': stamp,
+                        'color': (1, 0, 0),
+                        'fill_color': (1, 1, 0),
+                        'opacity': 0.7,
+                        'author': "LinPDF User",
+                    }
+                    self._annot_mgr.create_annotation(data, self._viewer.zoom)
+
+    def _export_file(self, fmt):
+        if not self._ensure_document():
+            return
+        filters = {
+            "docx": "Word Documents (*.docx)",
+            "xlsx": "Excel Files (*.xlsx)",
+            "pptx": "PowerPoint Files (*.pptx)",
+        }
+        path, _ = QFileDialog.getSaveFileName(
+            self, f"Export as {fmt.upper()}",
+            self._config.last_directory,
+            filters.get(fmt, f"*.{fmt}"),
+        )
+        if not path:
+            return
+        if not path.lower().endswith(f".{fmt}"):
+            path += f".{fmt}"
+
+        methods = {
+            "docx": self._exporter.to_docx,
+            "xlsx": self._exporter.to_xlsx,
+            "pptx": self._exporter.to_pptx,
+        }
+        method = methods.get(fmt)
+        if method:
+            self._status_bar.showMessage(f"Exporting to {fmt.upper()}...")
+            success, msg, out_path = method(path)
+            if success:
+                self._status_bar.showMessage(f"Exported to {out_path}", 5000)
+                QMessageBox.information(self, "Export Complete", f"Saved to:\n{out_path}")
+            else:
+                self._status_bar.showMessage(f"Export failed: {msg}", 5000)
+                QMessageBox.warning(self, "Export Failed", msg)
+
+    def _export_images(self):
+        if not self._ensure_document():
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", self._config.last_directory)
+        if not folder:
+            return
+        self._status_bar.showMessage("Exporting images...")
+        success, msg, out_path = self._exporter.to_image(folder)
+        if success:
+            self._status_bar.showMessage("Images exported.", 5000)
+            QMessageBox.information(self, "Export Complete", f"Images saved to:\n{folder}")
+        else:
+            self._status_bar.showMessage(f"Export failed: {msg}", 5000)
+            QMessageBox.warning(self, "Export Failed", msg)
+
+    def _run_ocr(self):
+        if not self._ensure_document():
+            return
+        ret = QMessageBox.question(
+            self, "Run OCR",
+            "Recognize text in all pages? This may take a while.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if ret == QMessageBox.Yes:
+            self._status_bar.showMessage("Running OCR...")
+            path = self._current_file + ".ocr.pdf" if self._current_file else "/tmp/ocr_output.pdf"
+            try:
+                self._ocr.make_searchable(path)
+                self._status_bar.showMessage("OCR complete.", 5000)
+                QMessageBox.information(self, "OCR Complete", f"Searchable PDF saved to:\n{path}")
+            except Exception as e:
+                self._status_bar.showMessage("OCR failed.", 5000)
+                QMessageBox.warning(self, "OCR Failed", str(e))
+
+    def _encrypt_document(self):
+        if not self._ensure_document():
+            return
+        password, ok = QInputDialog.getText(
+            self, "Encrypt PDF", "Enter password:",
+            echo=QInputDialog.Password,
+        )
+        if ok and password:
+            success, msg, _ = self._security.encrypt(self._document, password)
+            if success:
+                QMessageBox.information(self, "Encrypted", "Document encrypted.")
+            else:
+                QMessageBox.warning(self, "Encryption Failed", msg)
+
+    def _sign_document(self):
+        if not self._ensure_document():
+            return
+        cert_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Certificate",
+            "", "Certificate Files (*.p12 *.pfx);;All Files (*)",
+        )
+        if not cert_path:
+            return
+        password, ok = QInputDialog.getText(
+            self, "Certificate Password", "Enter certificate password:",
+            echo=QInputDialog.Password,
+        )
+        if not ok:
+            return
+        index = self._viewer.get_current_page()
+        page = self._document.get_page(index)
+        if page:
+            w, h = page.width, page.height
+            rect = fitz.Rect(w * 0.5, h * 0.7, w * 0.85, h * 0.85)
+            success, msg, _ = self._security.sign_page(
+                self._document, index, rect, cert_path, password,
+                reason="Document approval", location="",
+            )
+            if success:
+                QMessageBox.information(self, "Signed", "Signature added.")
+                self._rebuild_viewer()
+            else:
+                QMessageBox.warning(self, "Sign Failed", msg)
+
+    def _redact_document(self):
+        if not self._ensure_document():
+            return
+        text, ok = QInputDialog.getText(
+            self, "Redact Text", "Enter text to redact:",
+        )
+        if ok and text:
+            self._status_bar.showMessage("Redacting...")
+            success, msg, details = self._security.redact_text(self._document, text)
+            if success:
+                ret = QMessageBox.question(
+                    self, "Apply Redactions",
+                    f"Found redactions in pages. Apply permanently?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if ret == QMessageBox.Yes:
+                    self._security.apply_redactions(self._document)
+                    QMessageBox.information(self, "Redacted", "Redactions applied.")
+                    self._rebuild_viewer()
+            else:
+                QMessageBox.warning(self, "Redaction Failed", msg)
+
+    def _fill_form(self):
+        if not self._ensure_document():
+            return
+        success, msg, data = self._forms.get_form_fields(self._document)
+        if not success:
+            QMessageBox.warning(self, "Form Error", msg)
+            return
+        fields = data.get("fields", [])
+        if not fields:
+            QMessageBox.information(self, "No Fields", "No form fields found.")
+            return
+        QMessageBox.information(
+            self, "Form Fields",
+            f"Found {len(fields)} form field(s).\nForm filling dialog coming in next update.",
+        )
+
+    def _create_form(self):
+        self._show_coming_soon()
+
+    def _rebuild_viewer(self):
+        self._renderer.clear_cache()
+        self._viewer.set_document(self._document, self._renderer)
+        self._thumbnail_panel.refresh()
+        if self._annot_mgr:
+            self._annot_mgr.rebuild_all(self._viewer.zoom)
+
+    def _set_tool(self, mode):
+        self._current_tool = mode
+        is_select = mode == ToolMode.SELECT
+        is_pan = mode == ToolMode.PAN
+        self._btn_select.setChecked(is_select)
+        self._btn_pan.setChecked(is_pan)
+
+        if is_pan:
+            self._viewer.setDragMode(self._viewer.ScrollHandDrag)
+            if self._annot_mgr:
+                self._annot_mgr.set_active_tool(None)
+        elif is_select:
+            self._viewer.setDragMode(self._viewer.RubberBandDrag)
+            if self._annot_mgr:
+                self._annot_mgr.set_active_tool(None)
+        else:
+            self._viewer.setDragMode(self._viewer.NoDrag)
+            if self._annot_mgr:
+                tool_map = {
+                    ToolMode.HIGHLIGHT: AnnotationType.HIGHLIGHT,
+                    ToolMode.UNDERLINE: AnnotationType.UNDERLINE,
+                    ToolMode.STRIKEOUT: AnnotationType.STRIKEOUT,
+                    ToolMode.NOTE: AnnotationType.TEXT,
+                }
+                atype = tool_map.get(mode)
+                if atype:
+                    self._annot_mgr.set_active_tool(atype)
+
+    def _create_viewer(self):
+        self._viewer = PDFViewer()
+        self._thumbnail_panel = ThumbnailWidget()
+        self._annot_mgr = None
+
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.addWidget(self._thumbnail_panel)
+        self._splitter.addWidget(self._viewer)
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setSizes([200, 800])
+
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._ribbon)
+        layout.addWidget(self._splitter)
+        self.setCentralWidget(central)
 
     def _toggle_thumbnail_panel(self):
         visible = self._thumbnail_panel.isVisible()
@@ -305,12 +612,21 @@ class MainWindow(QMainWindow):
         self._renderer.clear_cache()
         self._viewer.set_document(self._document, self._renderer)
         self._thumbnail_panel.set_document(self._document, self._renderer)
+
+        if self._document.is_loaded:
+            self._annot_mgr = AnnotationManager(
+                self._document,
+                self._viewer._scene,
+            )
+            self._annot_mgr.load_all_annotations(self._viewer.zoom)
+
         self._update_title()
         self._page_label.setText(f"Page 1 of {self._document.page_count}")
 
     def _on_document_closed(self):
         self._viewer.clear()
         self._thumbnail_panel.clear()
+        self._annot_mgr = None
         self._current_file = None
         self._update_title()
         self._page_label.setText("No document")
@@ -329,6 +645,8 @@ class MainWindow(QMainWindow):
     def _on_zoom_changed(self, zoom):
         percent = int(zoom * 100)
         self._zoom_label.setText(f"{percent}%")
+        if self._annot_mgr:
+            self._annot_mgr.rebuild_all(zoom)
 
     def _update_title(self):
         title = APP_NAME

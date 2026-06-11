@@ -22,10 +22,9 @@ class ThumbnailWidget(QWidget):
         header.setFixedHeight(32)
         header.setStyleSheet("""
             QLabel {
-                background: #f0f0f0;
-                border-bottom: 1px solid #d0d0d0;
                 font-weight: bold;
                 font-size: 11px;
+                border-bottom: 1px solid palette(mid);
             }
         """)
         layout.addWidget(header)
@@ -40,7 +39,6 @@ class ThumbnailWidget(QWidget):
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._list.setStyleSheet("""
             QListWidget {
-                background: #fafafa;
                 border: none;
                 outline: none;
             }
@@ -50,11 +48,7 @@ class ThumbnailWidget(QWidget):
                 border-radius: 3px;
             }
             QListWidget::item:selected {
-                border: 2px solid #4a90d9;
-                background: #e8f0fe;
-            }
-            QListWidget::item:hover {
-                background: #f0f0f0;
+                border: 2px solid palette(highlight);
             }
         """)
         self._list.currentRowChanged.connect(self._on_row_changed)

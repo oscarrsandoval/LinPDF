@@ -1,9 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QTabWidget, QVBoxLayout, QHBoxLayout,
-    QToolButton, QLabel, QFrame, QSizePolicy, QButtonGroup,
+    QToolButton, QLabel, QFrame, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtCore import Qt, QSize
 
 
 class RibbonPanel(QFrame):
@@ -27,9 +26,8 @@ class RibbonPanel(QFrame):
         self._title.setStyleSheet("""
             QLabel {
                 font-size: 9px;
-                color: #666;
                 padding-top: 2px;
-                border-top: 1px solid #ddd;
+                border-top: 1px solid palette(mid);
             }
         """)
         self._title.setFixedHeight(18)
@@ -53,12 +51,12 @@ class RibbonPanel(QFrame):
                 font-size: 8px;
             }
             QToolButton:hover {
-                border-color: #c0c0c0;
-                background: #e8f0fe;
+                border-color: palette(highlight);
+                background: palette(light);
             }
             QToolButton:pressed, QToolButton:checked {
-                border-color: #a0a0a0;
-                background: #d0e0f0;
+                border-color: palette(dark);
+                background: palette(midlight);
             }
         """)
         self._button_layout.addWidget(btn)
@@ -114,27 +112,20 @@ class RibbonBar(QWidget):
         self._tab_widget.tabBar().setExpanding(False)
         self._tab_widget.setStyleSheet("""
             QTabWidget::pane {
-                border: 1px solid #d0d0d0;
+                border: 1px solid palette(mid);
                 border-top: none;
-                background: #f5f5f5;
             }
             QTabBar::tab {
                 padding: 6px 14px;
-                border: 1px solid #d0d0d0;
+                border: 1px solid palette(mid);
                 border-bottom: none;
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
-                background: #e8e8e8;
                 font-size: 10px;
                 min-width: 60px;
             }
             QTabBar::tab:selected {
-                background: #f5f5f5;
                 font-weight: bold;
-                border-bottom: 1px solid #f5f5f5;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #f0f0f0;
             }
         """)
         layout.addWidget(self._tab_widget)

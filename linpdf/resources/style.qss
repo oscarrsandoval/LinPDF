@@ -1,12 +1,11 @@
 /* LinPDF Global Stylesheet */
 
 QMainWindow {
-    background: #f0f0f0;
+    background: palette(window);
 }
 
 QMenuBar {
-    background: #f8f8f8;
-    border-bottom: 1px solid #d0d0d0;
+    border-bottom: 1px solid palette(mid);
     padding: 2px;
 }
 
@@ -15,13 +14,8 @@ QMenuBar::item {
     border-radius: 3px;
 }
 
-QMenuBar::item:selected {
-    background: #e0e0e0;
-}
-
 QMenu {
-    background: white;
-    border: 1px solid #c0c0c0;
+    border: 1px solid palette(mid);
     padding: 4px;
 }
 
@@ -31,41 +25,39 @@ QMenu::item {
 }
 
 QMenu::item:selected {
-    background: #4a90d9;
-    color: white;
+    background: palette(highlight);
+    color: palette(highlighted-text);
 }
 
 QMenu::separator {
     height: 1px;
-    background: #e0e0e0;
+    background: palette(mid);
     margin: 4px 8px;
 }
 
 QStatusBar {
-    background: #f8f8f8;
-    border-top: 1px solid #d0d0d0;
+    border-top: 1px solid palette(mid);
     font-size: 10px;
 }
 
 QSplitter::handle {
-    background: #d0d0d0;
+    background: palette(mid);
     width: 1px;
 }
 
 QScrollBar:vertical {
     width: 12px;
-    background: #f0f0f0;
 }
 
 QScrollBar::handle:vertical {
-    background: #c0c0c0;
+    background: palette(mid);
     border-radius: 4px;
     min-height: 30px;
     margin: 2px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #a0a0a0;
+    background: palette(dark);
 }
 
 QScrollBar::add-line:vertical,
